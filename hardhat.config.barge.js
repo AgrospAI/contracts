@@ -16,7 +16,7 @@ module.exports = {
   defaultNetwork: "ganache",
   solidity: {
     compilers: [
-     {
+      {
         version: "0.8.12",
         settings: {
           optimizer: {
@@ -47,7 +47,7 @@ module.exports = {
       url: process.env.NETWORK_RPC_URL,
       accounts: {
         mnemonic: process.env.GANACHE_MNEMONIC !== undefined ? process.env.GANACHE_MNEMONIC : "taxi music thumb unique chat sand crew more leg another off lamp",
-        initialIndex:0,
+        initialIndex: 0,
         count: 50,
       },
       gasPrice: 8000000,
