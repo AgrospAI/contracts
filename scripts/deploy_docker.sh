@@ -20,4 +20,5 @@ then
     fi
     echo "Starting deployment process..."
     node /ocean-contracts/scripts/deploy-contracts.js
+    touch /ocean-contracts/artifacts/ready
 fi
