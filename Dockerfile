@@ -41,5 +41,5 @@ COPY --from=builder /ocean-contracts/node_modules/ /ocean-contracts/node_modules
 RUN cp hardhat.config.barge.js hardhat.config.js
 RUN npx hardhat clean &&\
     npx hardhat compile --force &&\
-    rm -rf /ocean-contracts/artifacts/*
+    find /ocean-contracts/artifacts/* -name "*.dbg.json" -type f -delete
 ENTRYPOINT ["/ocean-contracts/scripts/deploy_docker.sh"]
