@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.12;
 
+import "../interfaces/IMetadataRequestManager.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -9,47 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @notice Tracks metadata change requests that can contain multiple types per request.
  *         Off-chain updates are referenced via IPFS or JSON hashes.
  */
-contract MetadataRequestManager {
-    enum Status {
-        Pending,
-        Approved,
-        Resolved,
-        Rejected,
-        Applied,
-        Cancelled
-    }
-
-    enum RequestType {
-        AllowNetworkAccess,
-        TrustedAlgorithm,
-        TrustedAlgorithmPublisher
-    }
-
-    struct SubRequest {
-        RequestType requestType;
-        string data; // Arbitrary data
-        uint256 yesWeight;
-        uint256 noWeight;
-    }
-
-    struct Request {
-        uint256 id;
-        address erc721; // Which ERC721 this request belongs to
-        address did; // token DID
-        address requester;
-        SubRequest[] subRequests; // One per request type
-        Status status;
-        uint256 createdAt;
-        uint256 decidedAt;
-        uint256 expiresAt;
-    }
-
-    uint256 private _counter;
-    uint256 private constant EXPIRE_PERIOD = 1 weeks;
-    mapping(uint256 => Request) public requests;
-    mapping(address => uint256[]) public requestsByDid;
-    mapping(address => uint256[]) public requestsByOwner;
-
+contract MetadataRequestManager is IMetadataRequestManager {
     event RequestCreated(
         uint256 id,
         address indexed erc721,
@@ -69,6 +30,12 @@ contract MetadataRequestManager {
     event RequestApplied(uint256 indexed id);
     event RequestCancelled(uint256 indexed id);
 
+    uint256 private _counter;
+    uint256 private constant EXPIRE_PERIOD = 1 weeks;
+    mapping(uint256 => Request) public requests;
+    mapping(address => uint256[]) public requestsByDid;
+    mapping(address => uint256[]) public requestsByOwner;
+
     function createRequest(
         address erc721,
         address did,
@@ -84,17 +51,19 @@ contract MetadataRequestManager {
         r.erc721 = erc721;
         r.did = did;
         r.requester = msg.sender;
-        r.status= Status.Pending;
-        r.createdAt= block.timestamp;
-        r.expiresAt= expiresAt;
+        r.status = Status.Pending;
+        r.createdAt = block.timestamp;
+        r.expiresAt = expiresAt;
 
         for (uint256 i = 0; i < requestTypes.length; i++) {
-            r.subRequests.push(SubRequest({
-                requestType: requestTypes[i],
-                data: data[i],
-                yesWeight: 0,
-                noWeight: 0
-            }));
+            r.subRequests.push(
+                SubRequest({
+                    requestType: requestTypes[i],
+                    data: data[i],
+                    yesWeight: 0,
+                    noWeight: 0
+                })
+            );
         }
 
         requestsByDid[did].push(id);
@@ -154,7 +123,7 @@ contract MetadataRequestManager {
             if (sr.yesWeight <= sr.noWeight) {
                 isAllApproved = false;
             } else {
-                isAnyApproved = true; 
+                isAnyApproved = true;
             }
         }
 
@@ -169,28 +138,6 @@ contract MetadataRequestManager {
         emit RequestVotingFinished(requestId, r.status);
     }
 
-    // TODO: On-chain metadata update
-    // function execute(uint256 requestId) external {
-    //     Request storage r = requests[requestId];
-    //     require(r.status != Status.Rejected, "is a rejected request");
-    //     require(r.status != Status.Pending, "request still pending");
-
-        
-    //     for (uint256 i = 0; i < r.subRequests.length; i++) {
-    //         SubRequest storage sr = r.subRequests[i];
-    //         if (sr.requestType == RequestType.AllowNetworkAccess) {
-
-    //         } else if (sr.requestType == RequestType.TrustedAlgorithm) {
-
-    //         } else if (sr.requestType == RequestType.TrustedAlgorithmPublisher) {
-                
-    //         }
-    //     }
-
-    //     r.status = Status.Applied;
-    //     emit RequestApplied(requestId);
-    // }
-
     // UTILITIES
     function _isNotExpired(Request storage req) internal view {
         require(
@@ -199,7 +146,9 @@ contract MetadataRequestManager {
         );
     }
 
-    function _getActivePendingRequest(uint256 id) internal view returns (Request storage r) {
+    function _getActivePendingRequest(
+        uint256 id
+    ) internal view returns (Request storage r) {
         r = requests[id];
         require(r.requester != address(0), "request not found");
         require(r.status == Status.Pending, "not pending");
