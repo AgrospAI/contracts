@@ -24,8 +24,6 @@ WORKDIR /ocean-contracts
 RUN npm i
 
 
-
-
 FROM base AS runner
 ENV NETWORK=barge
 ENV NETWORK_RPC_URL=127.0.0.1:8545

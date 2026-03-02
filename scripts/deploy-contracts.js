@@ -1500,7 +1500,7 @@ async function main() {
 
   const metadataRequestManagerContract = await MetadataRequestManager.connect(
     owner
-  ).deploy(owner.address)
+  ).deploy()
   await metadataRequestManagerContract.deployTransaction.wait()
   addresses.MetadataRequestManager = metadataRequestManagerContract.address
   if (show_verify) {
