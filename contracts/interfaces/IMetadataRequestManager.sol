@@ -2,13 +2,13 @@
 pragma solidity ^0.8.12;
 
 interface IMetadataRequestManager {
+
     enum Status {
         Pending,
-        Approved,
-        Resolved,
-        Rejected,
-        Applied,
-        Cancelled
+        Cancelled,
+        Approved, // All sub-requests accepted -> Fully applied
+        Resolved, // Some sub-request accepted -> Some applied
+        Rejected  // All sub-requests rejected -> Fully rejected
     }
 
     enum RequestType {
@@ -36,21 +36,61 @@ interface IMetadataRequestManager {
         uint256 expiresAt;
     }
 
-    function createRequest(
-        address erc721,
+    event RequestCreated(
+        uint256 id,
+        address indexed erc721,
         address did,
-        RequestType[] calldata requestTypes,
-        string[] calldata data
-    ) external returns (uint256 id);
+        address indexed requester,
+        RequestType[] requestTypes,
+        string[] data,
+        uint256 expiresAt
+    );
+    event RequestVoted(
+        uint256 indexed id,
+        address indexed voter,
+        bool[] approved,
+        uint256 weight  
+    );
+    event RequestCancelled(uint256 indexed id);
+    event RequestVotingFinished(uint256 indexed id, Status status);
+    event RequestApplied(uint256 indexed id, RequestType[] requestTypes, string[] data);
 
-    function vote(
-        uint256 requestId,
-        uint256 subrequestIndex,
-        bool inFavour,
-        uint256 weight
-    ) external;
-
-    function cancelRequest(uint256 id) external;
-
+    /**
+     * @notice Create a new request for change.
+     * 
+     * @param erc721 asset to change
+     * @param did asset identifier
+     * @param requestTypes type of request changes
+     * @param data additional data for the change request
+     */
+    function createRequest(address erc721, address did, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
+    
+    /**
+     * @notice Vote for a change request done in one of the assets owned 
+     * 
+     * @param requestId Request to addresss
+     * @param inFavour Votes in favour of subrequests
+     */
+    function vote(uint256 requestId, bool[] calldata inFavour) external;
+    
+    /**
+     * @notice Cancel an outgoing request
+     * 
+     * @param requestId request id to cancel
+     */
+    function cancelRequest(uint256 requestId) external;
+    
+    /** 
+     * @notice Mark an expired pending request as Approved/Resolved/Rejected depending on votes.
+     * 
+     * @param requestId request id to finalize
+    */
     function finalize(uint256 requestId) external;
+    
+    /**
+     * Set the used voting weight mechanism
+     * 
+     * @param _votingWeightOracle new voting weight contract
+     */
+    function setVotingWeightOracle(address _votingWeightOracle) external;
 }

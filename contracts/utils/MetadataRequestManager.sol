@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.12;
 
+import "../interfaces/IVotingWeight.sol";
 import "../interfaces/IMetadataRequestManager.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -10,31 +11,22 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @notice Tracks metadata change requests that can contain multiple types per request.
  *         Off-chain updates are referenced via IPFS or JSON hashes.
  */
-contract MetadataRequestManager is IMetadataRequestManager {
-    event RequestCreated(
-        uint256 id,
-        address indexed erc721,
-        address did,
-        address indexed requester,
-        RequestType[] requestTypes,
-        string[] data,
-        uint256 expiresAt
-    );
-    event RequestVoted(
-        uint256 indexed id,
-        address indexed voter,
-        bool approved,
-        uint256 weight
-    );
-    event RequestVotingFinished(uint256 indexed id, Status status);
-    event RequestApplied(uint256 indexed id);
-    event RequestCancelled(uint256 indexed id);
-
+contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     uint256 private _counter;
     uint256 private constant EXPIRE_PERIOD = 1 weeks;
     mapping(uint256 => Request) public requests;
     mapping(address => uint256[]) public requestsByDid;
     mapping(address => uint256[]) public requestsByOwner;
+
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    IVotingWeight public votingWeightOracle;
+
+    function setVotingWeightOracle(
+        address _votingWeightOracle
+    ) external onlyOwner {
+        require(_votingWeightOracle != address(0), "invalid address");
+        votingWeightOracle = IVotingWeight(_votingWeightOracle);
+    }
 
     function createRequest(
         address erc721,
@@ -83,37 +75,47 @@ contract MetadataRequestManager is IMetadataRequestManager {
 
     function vote(
         uint256 requestId,
-        uint256 subrequestIndex,
-        bool inFavour,
-        uint256 weight
-    ) external {
-        Request storage req = _getPendingRequest(requestId);
-        _isOwner(req);
-        _isNotExpired(req);
+        bool[] calldata inFavour
+    )
+        external
+        hasNotVoted(requestId)
+        isNotExpired(requestId)
+        isOwner(requestId)
+    {
+        Request storage req = getPendingRequest(requestId);
 
-        SubRequest storage sr = req.subRequests[subrequestIndex];
-        // TODO: Define voting weight logic
-        if (inFavour) {
-            sr.yesWeight += weight;
-        } else {
-            sr.noWeight += weight;
+        require(
+            inFavour.length == req.subRequests.length,
+            "invalid votes length"
+        );
+
+        hasVoted[requestId][msg.sender] = true;
+
+        uint256 weight = votingWeightOracle.getWeight(msg.sender, req.erc721);
+
+        for (uint256 i = 0; i < req.subRequests.length; i++) {
+            SubRequest storage sr = req.subRequests[i];
+            if (inFavour[i]) {
+                sr.yesWeight += weight;
+            } else {
+                sr.noWeight += weight;
+            }
         }
 
         emit RequestVoted(requestId, msg.sender, inFavour, weight);
     }
 
-    function cancelRequest(uint256 id) external {
-        Request storage r = _getPendingRequest(id);
-        _isRequester(r);
+    function cancelRequest(uint256 requestId) external isRequester(requestId) {
+        Request storage r = getPendingRequest(requestId);
 
         r.status = Status.Cancelled;
         r.decidedAt = block.timestamp;
 
-        emit RequestCancelled(id);
+        emit RequestCancelled(requestId);
     }
 
     function finalize(uint256 requestId) external {
-        Request storage r = _getActivePendingRequest(requestId);
+        Request storage r = getExpiredPendingRequest(requestId);
 
         bool isAllApproved = true;
         bool isAnyApproved = false;
@@ -127,47 +129,105 @@ contract MetadataRequestManager is IMetadataRequestManager {
             }
         }
 
-        if (isAllApproved) {
-            r.status = Status.Approved;
-        } else {
-            r.status = isAnyApproved ? Status.Resolved : Status.Rejected;
-        }
-
         r.decidedAt = block.timestamp;
 
+        if (!isAnyApproved) {
+            r.status = Status.Rejected;
+            emit RequestVotingFinished(requestId, r.status);
+            return;
+        }
+
+        r.status = isAllApproved ? Status.Approved : Status.Resolved;
         emit RequestVotingFinished(requestId, r.status);
+
+        // Build approved subrequests arrays
+        uint256 approvedCount = 0;
+        for (uint256 i = 0; i < r.subRequests.length; i++) {
+            if (r.subRequests[i].yesWeight > r.subRequests[i].noWeight) {
+                approvedCount++;
+            }
+        }
+
+        RequestType[] memory approvedTypes = new RequestType[](approvedCount);
+        string[] memory approvedData = new string[](approvedCount);
+        uint256 j = 0;
+        for (uint256 i = 0; i < r.subRequests.length; i++) {
+            if (r.subRequests[i].yesWeight > r.subRequests[i].noWeight) {
+                approvedTypes[j] = r.subRequests[i].requestType;
+                approvedData[j] = r.subRequests[i].data;
+                j++;
+            }
+        }
+
+        emit RequestApplied(requestId, approvedTypes, approvedData);
     }
 
     // UTILITIES
-    function _isNotExpired(Request storage req) internal view {
+    modifier isExpired(uint256 requestId) {
+        Request memory request = requests[requestId];
         require(
-            req.expiresAt >= block.timestamp,
+            block.timestamp >= request.expiresAt,
+            "voting period not finished yet"
+        );
+        _;
+    }
+
+    modifier isNotExpired(uint256 requestId) {
+        Request memory request = requests[requestId];
+        require(
+            request.expiresAt >= block.timestamp,
             "This request has already expired"
         );
+        _;
     }
 
-    function _getActivePendingRequest(
-        uint256 id
-    ) internal view returns (Request storage r) {
-        r = requests[id];
-        require(r.requester != address(0), "request not found");
-        require(r.status == Status.Pending, "not pending");
-        require(block.timestamp <= r.expiresAt, "request expired");
+    modifier hasNotVoted(uint256 requestId) {
+        Request memory request = requests[requestId];
+        require(!hasVoted[requestId][msg.sender], "already voted");
+        _;
     }
 
-    function _getPendingRequest(
-        uint256 id
-    ) internal view returns (Request storage r) {
-        r = requests[id];
-        require(r.requester != address(0), "request not found");
-        require(r.status == Status.Pending, "not pending");
+    modifier isNotInState(uint256 requestId, Status status) {
+        Request memory request = requests[requestId];
+        require(request.status != status, "request in invalid status");
+        _;
     }
 
-    function _isOwner(Request storage r) internal view {
-        require(Ownable(r.erc721).owner() == msg.sender, "caller not owner");
+    modifier isOwner(uint256 requestId) {
+        Request memory request = requests[requestId];
+        require(
+            Ownable(request.erc721).owner() == msg.sender,
+            "caller not owner"
+        );
+        _;
     }
 
-    function _isRequester(Request storage r) internal view {
-        require(r.requester == msg.sender, "caller not requester");
+    modifier isRequester(uint256 requestId) {
+        Request memory request = requests[requestId];
+        require(request.requester == msg.sender, "caller not requester");
+        _;
+    }
+
+    function getExpiredPendingRequest(
+        uint256 requestId
+    )
+        internal
+        view
+        isNotInState(requestId, Status.Pending)
+        isExpired(requestId)
+        returns (Request storage)
+    {
+        return requests[requestId];
+    }
+
+    function getPendingRequest(
+        uint256 requestId
+    )
+        internal
+        view
+        isNotInState(requestId, Status.Pending)
+        returns (Request storage)
+    {
+        return requests[requestId];
     }
 }
