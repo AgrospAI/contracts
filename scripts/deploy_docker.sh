@@ -34,6 +34,4 @@ else
 
 fi
 
-if [ ! -e ./outputs/ready ]; then
-    touch ./outputs/ready
-fi
+touch ./outputs/ready
