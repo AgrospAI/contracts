@@ -27,7 +27,7 @@ interface IMetadataRequestManager {
     struct Request {
         uint256 id;
         address erc721; // Which ERC721 this request belongs to
-        address did; // token DID
+        string did; // token DID
         address requester;
         SubRequest[] subRequests; // One per request type
         Status status;
@@ -39,7 +39,7 @@ interface IMetadataRequestManager {
     event RequestCreated(
         uint256 id,
         address indexed erc721,
-        address did,
+        string did,
         address indexed requester,
         RequestType[] requestTypes,
         string[] data,
@@ -63,7 +63,7 @@ interface IMetadataRequestManager {
      * @param requestTypes type of request changes
      * @param data additional data for the change request
      */
-    function createRequest(address erc721, address did, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
+    function createRequest(address erc721, string memory did, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
     
     /**
      * @notice Vote for a change request done in one of the assets owned 

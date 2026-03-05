@@ -2,8 +2,8 @@
 pragma solidity 0.8.12;
 
 import "../interfaces/IVotingWeight.sol";
+import "../interfaces/IERC721Template.sol";
 import "../interfaces/IMetadataRequestManager.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -15,8 +15,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     uint256 private _counter;
     uint256 private constant EXPIRE_PERIOD = 1 weeks;
     mapping(uint256 => Request) public requests;
-    mapping(address => uint256[]) public requestsByDid;
-    mapping(address => uint256[]) public requestsByOwner;
+    mapping(string => uint256[]) public requestsByDid;
 
     mapping(uint256 => mapping(address => bool)) public hasVoted;
     IVotingWeight public votingWeightOracle;
@@ -30,7 +29,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
     function createRequest(
         address erc721,
-        address did,
+        string memory did,
         RequestType[] calldata requestTypes,
         string[] calldata data
     ) external returns (uint256) {
@@ -59,7 +58,6 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
         }
 
         requestsByDid[did].push(id);
-        requestsByOwner[Ownable(erc721).owner()].push(id);
 
         emit RequestCreated(
             id,
@@ -195,9 +193,10 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
     modifier isOwner(uint256 requestId) {
         Request memory request = requests[requestId];
+        IERC721Template.Roles memory roles = IERC721Template(request.erc721).getPermissions(msg.sender);
         require(
-            Ownable(request.erc721).owner() == msg.sender,
-            "caller not owner"
+            roles.manager || roles.updateMetadata,
+            "caller not manager"
         );
         _;
     }
