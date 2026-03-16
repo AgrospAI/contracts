@@ -26,8 +26,8 @@ interface IMetadataRequestManager {
 
     struct Request {
         uint256 id;
-        address erc721; // Which ERC721 this request belongs to
-        string did; // token DID
+        address datasetAddress;
+        address algorithmAddress;
         address requester;
         SubRequest[] subRequests; // One per request type
         Status status;
@@ -38,8 +38,8 @@ interface IMetadataRequestManager {
 
     event RequestCreated(
         uint256 id,
-        address indexed erc721,
-        string did,
+        address indexed datasetAddress,
+        address indexed algorithmAddress,
         address indexed requester,
         RequestType[] requestTypes,
         string[] data,
@@ -56,14 +56,14 @@ interface IMetadataRequestManager {
     event RequestApplied(uint256 indexed id, RequestType[] requestTypes, string[] data);
 
     /**
-     * @notice Create a new request for change.
+     * @notice Create a new request for metadata change.
      * 
-     * @param erc721 asset to change
-     * @param did asset identifier
+     * @param algorithmAddress dataset to change did
+     * @param datasetAddress dataset to change did
      * @param requestTypes type of request changes
      * @param data additional data for the change request
      */
-    function createRequest(address erc721, string memory did, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
+    function createRequest(address algorithmAddress, address datasetAddress, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
     
     /**
      * @notice Vote for a change request done in one of the assets owned 
