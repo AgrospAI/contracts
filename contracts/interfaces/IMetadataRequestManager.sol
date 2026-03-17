@@ -24,6 +24,12 @@ interface IMetadataRequestManager {
         uint256 noWeight;
     }
 
+    struct MetadataRequestVote {
+        bool[] inFavour;
+        string reason;
+        uint256 weight;
+    }
+
     struct Request {
         uint256 id;
         address datasetAddress;

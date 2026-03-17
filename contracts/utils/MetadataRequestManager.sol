@@ -17,7 +17,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   mapping(uint256 => Request) public requests;
   mapping(address => uint256[]) public requestsByDataset;
 
-  mapping(uint256 => mapping(address => bool)) public hasVoted;
+  mapping(uint256 => mapping(address => MetadataRequestVote)) public votes;
   IVotingWeight public votingWeightOracle;
 
   function setVotingWeightOracle(
@@ -83,12 +83,15 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     string calldata data
   ) external hasNotVoted(requestId) isNotExpired(requestId) isOwner(requestId) {
     Request storage req = getPendingRequest(requestId);
-
     require(inFavour.length == req.subRequests.length, 'invalid votes length');
 
-    hasVoted[requestId][msg.sender] = true;
-
     uint256 weight = votingWeightOracle.getWeight(msg.sender, req.datasetAddress);
+
+    votes[requestId][msg.sender] = MetadataRequestVote({
+      inFavour: inFavour,
+      data: data,
+      weight: weight
+    });
 
     for (uint256 i = 0; i < req.subRequests.length; i++) {
       SubRequest storage sr = req.subRequests[i];
@@ -181,7 +184,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
   modifier hasNotVoted(uint256 requestId) {
     Request memory request = requests[requestId];
-    require(!hasVoted[requestId][msg.sender], 'already voted');
+    require(votes[requestId][msg.sender].weight == 0, 'already voted');
     _;
   }
 
