@@ -92,6 +92,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
     for (uint256 i = 0; i < req.subRequests.length; i++) {
       SubRequest storage sr = req.subRequests[i];
+      sr.data = data;
       if (inFavour[i]) {
         sr.yesWeight += weight;
       } else {
