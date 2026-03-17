@@ -30,6 +30,8 @@ interface IMetadataRequestManager {
         address algorithmAddress;
         address requester;
         SubRequest[] subRequests; // One per request type
+        string[] data;
+        string reason;
         Status status;
         uint256 createdAt;
         uint256 decidedAt;
@@ -43,13 +45,15 @@ interface IMetadataRequestManager {
         address indexed requester,
         RequestType[] requestTypes,
         string[] data,
+        string reason,
         uint256 expiresAt
     );
     event RequestVoted(
         uint256 indexed id,
         address indexed voter,
         bool[] approved,
-        uint256 weight  
+        uint256 weight,
+        string data
     );
     event RequestCancelled(uint256 indexed id);
     event RequestVotingFinished(uint256 indexed id, Status status);
@@ -62,16 +66,18 @@ interface IMetadataRequestManager {
      * @param datasetAddress dataset to change did
      * @param requestTypes type of request changes
      * @param data additional data for the change request
+     * @param reason to make the metadata change request
      */
-    function createRequest(address algorithmAddress, address datasetAddress, RequestType[] calldata requestTypes, string[] calldata data) external returns (uint256);
+    function createRequest(address algorithmAddress, address datasetAddress, RequestType[] calldata requestTypes, string[] calldata data, string calldata reason) external returns (uint256);
     
     /**
      * @notice Vote for a change request done in one of the assets owned 
      * 
      * @param requestId Request to addresss
      * @param inFavour Votes in favour of subrequests
+     * @param data Extra data such as the response reason
      */
-    function vote(uint256 requestId, bool[] calldata inFavour) external;
+    function vote(uint256 requestId, bool[] calldata inFavour, string calldata data) external;
     
     /**
      * @notice Cancel an outgoing request

@@ -31,7 +31,8 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     address datasetAddress,
     address algorithmAddress,
     RequestType[] calldata requestTypes,
-    string[] calldata data
+    string[] calldata data,
+    string calldata reason
   ) external override returns (uint256) {
     require(requestTypes.length == data.length, 'mismatched arrays');
     uint256 id = ++_counter;
@@ -41,6 +42,9 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     r.id = id;
     r.datasetAddress = datasetAddress;
     r.algorithmAddress = algorithmAddress;
+
+    r.data = data;
+    r.reason = reason;
 
     r.requester = msg.sender;
     r.status = Status.Pending;
@@ -67,6 +71,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
       msg.sender,
       requestTypes,
       data,
+      reason,
       expiresAt
     );
     return id;
@@ -74,7 +79,8 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
   function vote(
     uint256 requestId,
-    bool[] calldata inFavour
+    bool[] calldata inFavour,
+    string calldata data
   ) external hasNotVoted(requestId) isNotExpired(requestId) isOwner(requestId) {
     Request storage req = getPendingRequest(requestId);
 
@@ -93,7 +99,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
       }
     }
 
-    emit RequestVoted(requestId, msg.sender, inFavour, weight);
+    emit RequestVoted(requestId, msg.sender, inFavour, weight, data);
   }
 
   function cancelRequest(uint256 requestId) external isRequester(requestId) {
@@ -157,7 +163,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   modifier isExpired(uint256 requestId) {
     Request memory request = requests[requestId];
     require(
-      block.timestamp >= request.expiresAt,
+      request.expiresAt <= block.timestamp,
       'voting period not finished yet'
     );
     _;
@@ -178,9 +184,9 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     _;
   }
 
-  modifier isNotInState(uint256 requestId, Status status) {
+  modifier isInState(uint256 requestId, Status status) {
     Request memory request = requests[requestId];
-    require(request.status != status, 'request in invalid status');
+    require(request.status == status, 'request in invalid status');
     _;
   }
 
@@ -203,7 +209,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   )
     internal
     view
-    isNotInState(requestId, Status.Pending)
+    isInState(requestId, Status.Pending)
     isExpired(requestId)
     returns (Request storage)
   {
@@ -215,7 +221,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   )
     internal
     view
-    isNotInState(requestId, Status.Pending)
+    isInState(requestId, Status.Pending)
     returns (Request storage)
   {
     return requests[requestId];
