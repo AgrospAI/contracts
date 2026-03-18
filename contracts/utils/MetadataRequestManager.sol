@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.12;
 
-import "../interfaces/IVotingWeight.sol";
-import "../interfaces/IERC721Template.sol";
-import "../interfaces/IMetadataRequestManager.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import '../interfaces/IVotingWeight.sol';
+import '../interfaces/IERC721Template.sol';
+import '../interfaces/IMetadataRequestManager.sol';
+import '@openzeppelin/contracts/access/Ownable.sol';
 
 /**
  * @title MetadataRequestManager
@@ -42,8 +42,6 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     r.id = id;
     r.datasetAddress = datasetAddress;
     r.algorithmAddress = algorithmAddress;
-
-    r.data = data;
     r.reason = reason;
 
     r.requester = msg.sender;
@@ -79,31 +77,55 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
 
   function vote(
     uint256 requestId,
-    bool[] calldata inFavour,
+    uint256 inFavourBitmap,
     string calldata data
-  ) external hasNotVoted(requestId) isNotExpired(requestId) isOwner(requestId) {
+  )
+    external
+    override
+    hasNotVoted(requestId)
+    isNotExpired(requestId)
+    isOwner(requestId)
+  {
     Request storage req = getPendingRequest(requestId);
-    require(inFavour.length == req.subRequests.length, 'invalid votes length');
 
-    uint256 weight = votingWeightOracle.getWeight(msg.sender, req.datasetAddress);
+    uint256 weight = votingWeightOracle.getWeight(
+      msg.sender,
+      req.datasetAddress
+    );
 
-    votes[requestId][msg.sender] = MetadataRequestVote({
-      inFavour: inFavour,
-      data: data,
-      weight: weight
-    });
+    _storeVote(requestId, inFavourBitmap, data, weight);
+    _addWeight(req, inFavourBitmap, weight);
 
-    for (uint256 i = 0; i < req.subRequests.length; i++) {
-      SubRequest storage sr = req.subRequests[i];
-      sr.data = data;
-      if (inFavour[i]) {
+    emit RequestVoted(requestId, msg.sender, inFavourBitmap, weight, data);
+  }
+
+  function _storeVote(
+    uint256 requestId,
+    uint256 inFavourBitmap,
+    string calldata data,
+    uint256 weight
+  ) internal {
+    MetadataRequestVote storage requestVote = votes[requestId][msg.sender];
+    requestVote.inFavourBitmap = inFavourBitmap;
+    requestVote.reason = data;
+    requestVote.weight = weight;
+  }
+
+  function _addWeight(
+    Request storage request,
+    uint256 inFavourBitmap,
+    uint256 weight
+  ) internal {
+    for (uint256 i = 0; i < request.subRequests.length; i++) {
+      SubRequest storage sr = request.subRequests[i];
+      bool isYes = ((inFavourBitmap >> i) & 1) == 1;
+
+      if (isYes) {
         sr.yesWeight += weight;
       } else {
         sr.noWeight += weight;
       }
     }
-
-    emit RequestVoted(requestId, msg.sender, inFavour, weight, data);
   }
 
   function cancelRequest(uint256 requestId) external isRequester(requestId) {
