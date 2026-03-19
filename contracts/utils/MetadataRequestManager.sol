@@ -33,7 +33,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     RequestType[] calldata requestTypes,
     string[] calldata data,
     string calldata reason
-  ) external override returns (uint256) {
+  ) external checkUniqueRequestTypes(requestTypes) override returns (uint256) {
     require(requestTypes.length == data.length, 'mismatched arrays');
     uint256 id = ++_counter;
     uint256 expiresAt = block.timestamp + EXPIRE_PERIOD;
@@ -118,7 +118,7 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   ) internal {
     for (uint256 i = 0; i < request.subRequests.length; i++) {
       SubRequest storage sr = request.subRequests[i];
-      bool isYes = ((inFavourBitmap >> i) & 1) == 1;
+      bool isYes = ((inFavourBitmap >> uint256(sr.requestType)) & 1) == 1;
 
       if (isYes) {
         sr.yesWeight += weight;
@@ -227,6 +227,16 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   modifier isRequester(uint256 requestId) {
     Request memory request = requests[requestId];
     require(request.requester == msg.sender, 'caller not requester');
+    _;
+  }
+
+  modifier checkUniqueRequestTypes(RequestType[] calldata requestTypes) {
+    uint256 bitmap = 0;
+    for (uint256 i = 0; i < requestTypes.length; i++) {
+      uint256 bit = 1 << uint256(requestTypes[i]);
+      require((bitmap & bit) == 0, 'duplicate request type');
+      bitmap |= bit;
+    }
     _;
   }
 
