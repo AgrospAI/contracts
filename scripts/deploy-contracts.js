@@ -1474,7 +1474,7 @@ async function main() {
   }
 
   // VotingWeight
-  if (logging) console.info('Deploying MetadataRequestManager')
+  if (logging) console.info('Deploying VotingWeight')
   const VotingWeight = await ethers.getContractFactory('VotingWeight')
 
   const votingWeightContract = await VotingWeight.connect(owner).deploy()
@@ -1510,6 +1510,11 @@ async function main() {
         addresses.MetadataRequestManager
     )
   }
+
+  // Link metadatarequestmanager and votingweight
+  const tx = await metadataRequestManagerContract.setVotingWeightOracle(votingWeightContract.address)
+  await tx.wait()
+  if (logging) console.info('Linked MetadataRequestManager and VotingWeight')
 
   if (addressFile) {
     // write address.json if needed

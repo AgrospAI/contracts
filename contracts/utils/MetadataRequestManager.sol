@@ -13,9 +13,13 @@ import '@openzeppelin/contracts/access/Ownable.sol';
  */
 contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   uint256 private _counter;
-  uint256 private constant EXPIRE_PERIOD = 1 weeks;
+  uint256 private _subRequestCounter;
+  uint256 private _voteCounter;
+
   mapping(uint256 => Request) public requests;
   mapping(address => uint256[]) public requestsByDataset;
+
+  uint256 public MAX_EXPIRE_DURATION = 30 days;
 
   mapping(uint256 => mapping(address => MetadataRequestVote)) public votes;
   IVotingWeight public votingWeightOracle;
@@ -27,52 +31,64 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     votingWeightOracle = IVotingWeight(_votingWeightOracle);
   }
 
+  function setMaxExpireDuration(uint256 _maxExpireDuration) external onlyOwner {
+    require(_maxExpireDuration > 0, 'must be greater than zero');
+    MAX_EXPIRE_DURATION = _maxExpireDuration;
+  }
+
   function createRequest(
-    address datasetAddress,
-    address algorithmAddress,
-    RequestType[] calldata requestTypes,
-    string[] calldata data,
-    string calldata reason
-  ) external checkUniqueRequestTypes(requestTypes) override returns (uint256) {
-    require(requestTypes.length == data.length, 'mismatched arrays');
+    RequestCreationParams calldata params
+  )
+    external
+    override
+    checkUniqueRequestTypes(params.requestTypes)
+    returns (uint256)
+  {
+    require(params.datasetAddress != address(0), 'invalid dataset address');
+    require(params.algorithmAddress != address(0), 'invalid algorithm address');
+    require(params.requestTypes.length > 0, 'at least one request type is required');
+    require(params.requestTypes.length == params.data.length, 'request types and data must have the same length');
+    require(params.expiresIn <= MAX_EXPIRE_DURATION, "Expiration exceeds maximum limit");
+    require(params.expiresIn > 0, "Expiration must be greater than zero");
+
     uint256 id = ++_counter;
-    uint256 expiresAt = block.timestamp + EXPIRE_PERIOD;
 
     Request storage r = requests[id];
     r.id = id;
-    r.datasetAddress = datasetAddress;
-    r.algorithmAddress = algorithmAddress;
-    r.reason = reason;
+    r.datasetAddress = params.datasetAddress;
+    r.algorithmAddress = params.algorithmAddress;
+    r.reason = params.reason;
 
     r.requester = msg.sender;
     r.status = Status.Pending;
     r.createdAt = block.timestamp;
-    r.expiresAt = expiresAt;
+    r.expiresAt = block.timestamp + params.expiresIn;
 
-    for (uint256 i = 0; i < requestTypes.length; i++) {
+    for (uint256 i = 0; i < params.requestTypes.length; i++) {
       r.subRequests.push(
         SubRequest({
-          requestType: requestTypes[i],
-          data: data[i],
+          id: ++_subRequestCounter,
+          requestType: params.requestTypes[i],
+          data: params.data[i],
           yesWeight: 0,
           noWeight: 0
         })
       );
     }
 
-    requestsByDataset[datasetAddress].push(id);
-
     emit RequestCreated(
-      id,
-      datasetAddress,
-      algorithmAddress,
-      msg.sender,
-      requestTypes,
-      data,
-      reason,
-      expiresAt
+      r.id,
+      r.datasetAddress,
+      r.algorithmAddress,
+      r.requester,
+      params.requestTypes,
+      params.data,
+      params.reason,
+      r.expiresAt
     );
-    return id;
+
+    requestsByDataset[r.datasetAddress].push(r.id);
+    return r.id;
   }
 
   function vote(
@@ -106,6 +122,8 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
     uint256 weight
   ) internal {
     MetadataRequestVote storage requestVote = votes[requestId][msg.sender];
+    requestVote.id = ++_voteCounter;
+    requestVote.voter = msg.sender;
     requestVote.inFavourBitmap = inFavourBitmap;
     requestVote.reason = data;
     requestVote.weight = weight;
@@ -227,6 +245,14 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   modifier isRequester(uint256 requestId) {
     Request memory request = requests[requestId];
     require(request.requester == msg.sender, 'caller not requester');
+    _;
+  }
+
+  modifier sameLength(
+    RequestType[] calldata requestTypes,
+    string[] calldata data
+  ) {
+    require(requestTypes.length == data.length, 'mismatched arrays');
     _;
   }
 

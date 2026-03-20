@@ -18,6 +18,7 @@ interface IMetadataRequestManager {
     }
 
     struct SubRequest {
+        uint256 id;
         RequestType requestType;
         string data; // Arbitrary data
         uint256 yesWeight;
@@ -25,6 +26,8 @@ interface IMetadataRequestManager {
     }
 
     struct MetadataRequestVote {
+        uint256 id;
+        address voter;
         uint256 inFavourBitmap;
         string reason;
         uint256 weight;
@@ -44,9 +47,9 @@ interface IMetadataRequestManager {
     }
 
     event RequestCreated(
-        uint256 id,
+        uint256 indexed id,
         address indexed datasetAddress,
-        address indexed algorithmAddress,
+        address algorithmAddress,
         address indexed requester,
         RequestType[] requestTypes,
         string[] data,
@@ -64,16 +67,21 @@ interface IMetadataRequestManager {
     event RequestVotingFinished(uint256 indexed id, Status status);
     event RequestApplied(uint256 indexed id, RequestType[] requestTypes, string[] data);
 
+    struct RequestCreationParams {
+        address datasetAddress;
+        address algorithmAddress;
+        string reason;
+        RequestType[] requestTypes;
+        string[] data;
+        uint256 expiresIn;
+    }
+
     /**
      * @notice Create a new request for metadata change.
      * 
-     * @param algorithmAddress dataset to change did
-     * @param datasetAddress dataset to change did
-     * @param requestTypes type of request changes
-     * @param data additional data for the change request
-     * @param reason to make the metadata change request
+     * @param params Request creation parameters
      */
-    function createRequest(address algorithmAddress, address datasetAddress, RequestType[] calldata requestTypes, string[] calldata data, string calldata reason) external returns (uint256);
+    function createRequest(RequestCreationParams calldata params) external returns (uint256);
     
     /**
      * @notice Vote for a change request done in one of the assets owned 
