@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 
-import '../interfaces/IVotingWeight.sol';
-import '@openzeppelin/contracts/access/Ownable.sol';
+import '../../interfaces/IVotingWeight.sol';
 
-contract VotingWeight is IVotingWeight, Ownable {
+contract MockVotingWeight is IVotingWeight {
   mapping(address => mapping(address => uint256)) public weights;
 
   function setWeight(
     address voter,
     address erc721,
     uint256 weight
-  ) external override onlyOwner {
+  ) external override {
     weights[voter][erc721] = weight;
   }
 
