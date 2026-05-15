@@ -24,6 +24,8 @@ contract MetadataRequestManager is IMetadataRequestManager, Ownable {
   mapping(uint256 => mapping(address => MetadataRequestVote)) public votes;
   IVotingWeight public votingWeightOracle;
 
+  constructor () Ownable(msg.sender) {}
+
   function setVotingWeightOracle(
     address _votingWeightOracle
   ) external onlyOwner {
